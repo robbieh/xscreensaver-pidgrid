@@ -24,6 +24,15 @@ struct utlbuf_s {
 	int siz;
 } utlbuf_s;
 
+static inline void oomscore2proc(const char *S, proc_t *P)
+{
+	    sscanf(S, "%d", &P->oom_score);
+}
+
+static inline void oomadj2proc(const char *S, proc_t *P)
+{
+	    sscanf(S, "%d", &P->oom_adj);
+}
 
 static int stat2proc (const char *S, proc_t *P) {
 	char *tmp;
@@ -131,6 +140,9 @@ int simple_readproc(char *path, proc_t *p) {
 	snprintf(procpath, PROCPATHLEN, "/proc/%s", path);
 	if (file2str(procpath, "stat", &ub) == -1) goto next_proc;
 	rc += stat2proc(ub.buf, p);
+	if (file2str(path, "oom_score", &ub) != -1) oomscore2proc(ub.buf, p);
+	if (file2str(path, "oom_score_adj", &ub) != -1) oomadj2proc(ub.buf, p);
+
 
 next_proc:
 	return rc;
