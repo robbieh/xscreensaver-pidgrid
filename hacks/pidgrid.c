@@ -28,7 +28,7 @@
 # include "xdbe.h"
 #endif /* HAVE_DOUBLE_BUFFER_EXTENSION */
 
-#define MAXHIST 100
+#define MAXHIST 200
 #define MAXUID 65534
 #define ROOT 0
 #define SYSMIN 1
@@ -61,18 +61,19 @@ struct state {
 
 	XColor colors[255];
 	XColor c_root[100];
-	XColor c_root_sleep[100];
-	XColor c_nobody;
-	XColor c_user;
+	XColor c_root_oom[100];
+	XColor c_nobody[100];
+	XColor c_nobody_oom[100];
 	XColor c_system[100];
-	XColor c_system_sleep[100];
+	XColor c_system_oom[100];
 	XColor c_sys[SYSMAX - SYSMIN + 1];
 	XColor c_users[200];
-	XColor c_users_sleep[200];
+	XColor c_users_oom[200];
 
 	int c_user_current;
 	int c_root_current;
 	int c_system_current;
+	int c_nobody_current;
 	int ncolors;
 	int max_depth;
 	int min_height;
@@ -93,7 +94,7 @@ struct state {
 
 	int delay;
 	XWindowAttributes xgwa;
-	GC fgc, bgc;
+	GC fgc, bgc, textgc;
 
 	int history_index;
 	int history_index_last;
@@ -157,6 +158,7 @@ static void walk_and_draw(const void *what, const VISIT which, void *closure){
 	int i, ii, x, y, segw, height, spacing, totheight;
 	int hsize, gap, viscount; /* variables  for bar segments */
 	char text[1000] = {'\0'};
+	char name[100] = {'\0'};
 	int textsize;
 
 	spacing = 3;
@@ -191,19 +193,35 @@ static void walk_and_draw(const void *what, const VISIT which, void *closure){
 	if (y + height > st->xgwa.height) { pth->visible = false; return;} else { pth->visible = true; };
 
 
-	if (pth->processes[0].uid == 0) {              /*root*/
+	if (pth->processes[st->history_index_last].uid == 0) {              /*root*/
+		if (pth->processes[st->history_index_last].oom_score < 600)
 		XSetForeground(st->dpy,st->fgc,st->c_root[st->c_root_current].pixel);
-		st->c_root_current++; if (st->c_root_current++ >= 99) st->c_root_current = 0;
-	} else if (pth->processes[0].uid == 65534)  {  /*nobody*/
-		XSetForeground(st->dpy,st->fgc,st->c_nobody.pixel);
-	} else if (pth->processes[0].uid < 1000)  {    /*system*/
+		else
+		XSetForeground(st->dpy,st->fgc,st->c_root_oom[st->c_root_current].pixel);
+		st->c_root_current++; 
+		if (st->c_root_current++ >= 99) st->c_root_current = 0;
+	} else if (pth->processes[st->history_index_last].uid == 65534)  {  /*nobody*/
+		if (pth->processes[st->history_index_last].oom_score < 600)
+		XSetForeground(st->dpy,st->fgc,st->c_nobody[st->c_nobody_current].pixel);
+		else
+		XSetForeground(st->dpy,st->fgc,st->c_nobody_oom[st->c_nobody_current].pixel);
+		st->c_nobody_current++; 
+		if (st->c_nobody_current++ >= 99) st->c_nobody_current = 0;
+	} else if (pth->processes[st->history_index_last].uid < 1000)  {    /*system*/
+		if (pth->processes[st->history_index_last].oom_score < 600)
 		XSetForeground(st->dpy,st->fgc,st->c_system[st->c_system_current].pixel);
+		else
+		XSetForeground(st->dpy,st->fgc,st->c_system_oom[st->c_system_current].pixel);
 		st->c_system_current++;
 		if (st->c_system_current++ >= 99) st->c_system_current = 0;
 	} else  {                                      /*users*/
+
+		if (pth->processes[st->history_index_last].oom_score < 600)
 		XSetForeground(st->dpy,st->fgc,st->c_users[st->c_user_current].pixel);
+		else
+		XSetForeground(st->dpy,st->fgc,st->c_users_oom[st->c_user_current].pixel);
 		st->c_user_current++;
-		if (st->c_user_current++ >= 199) st->c_user_current = 0;
+		if (st->c_user_current++ >= 99) st->c_user_current = 0;
 	}
 
 	hsize = 0;
@@ -274,6 +292,7 @@ static void walk_and_draw(const void *what, const VISIT which, void *closure){
 		x -= (segw + gap);
 
 	}
+
 	if (st->detailpid == pth->tid) {
 		switch (st->detailstate) {
 			case waiting: 
@@ -292,13 +311,17 @@ static void walk_and_draw(const void *what, const VISIT which, void *closure){
 				break;
 			case showing:
 				st->currenty += st->detailsize;
-				textsize = sprintf(text, "PID: %i UID: %i RSS: %lu VSIZE: %lu STATE: %c OOMSCORE: %i", 
+				//stat2name(pth->tid, name);
+				//fprintf(stderr,"got name %p %s\n", name, name);
+				//textsize = sprintf(text, "PID: %i UID: %i RSS: %lu VSIZE: %lu STATE: %c OOMSCORE: %i -- %s", 
+				textsize = sprintf(text, "PID: %i UID: %i RSS: %lu VSIZE: %lu STATE: %c OOMSCORE: %i -- ", 
 						pth->tid, 
 						pth->processes[st->history_index_last].uid, 
 						pth->processes[st->history_index_last].rss, 
 						pth->processes[st->history_index_last].vsize,
 						pth->processes[st->history_index_last].state,
-						pth->processes[st->history_index_last].oom_score
+						pth->processes[st->history_index_last].oom_score//,
+				//		name
 						);
 				XftDrawStringUtf8 (st->xftdraw, &st->xft_fg, st->font,
 						10, y + (height * 2) + st->line_height,
@@ -355,11 +378,18 @@ update_proctree(struct state *st) {
 	struct proc_t_history **entry, *proto;
 	proc_t processes[MAXPROCS];
 	struct proc_t emptyproc;
+
 	emptyproc.tid=0;
 	emptyproc.ppid=0;
 	emptyproc.uid=0;
-	emptyproc.rss=0;
+	emptyproc.oom_score=0;
+	emptyproc.oom_adj=0;
+	emptyproc.rtprio=0;
+	emptyproc.sched=0;
+	emptyproc.tty=0;
+	emptyproc.state='S';
 	emptyproc.vsize=0;
+	emptyproc.rss=0;
 
 	numprocs = get_all_procs(processes, MAXPROCS);
 
@@ -390,19 +420,18 @@ update_proctree(struct state *st) {
 	static void *
 pidgrid_init (Display *dpy, Window window)
 {
-	int colorcount;
-	char *fontname, *s;
+	int colorcount, hue;
+	char *fontname, *colorname;
 
 	struct state *st;
 	XGCValues gcv;
 
-	fprintf(stderr, "init pidgrid\n");
 	st = (struct state *) calloc (1, sizeof(*st));
 
 	st->dpy = dpy;
 	st->window = window;
 
-	st->delay = get_integer_resource (dpy, "delay", "Integer");
+	st->delay = get_integer_resource (st->dpy, "delay", "Integer");
 	st->dbuf = get_boolean_resource (st->dpy, "doubleBuffer", "Boolean");
 
 	XGetWindowAttributes (dpy, window, &st->xgwa);
@@ -439,17 +468,20 @@ pidgrid_init (Display *dpy, Window window)
 	}
 	if (st->ba) XFillRectangle (st->dpy, st->ba, st->bgc, 0, 0, st->xgwa.width, st->xgwa.height);
 
+
 	gcv.foreground = get_pixel_resource(dpy, st->xgwa.colormap, "foreground", "Foreground");
+	gcv.background = get_pixel_resource(dpy, st->xgwa.colormap, "background", "Background");
 	st->fgc = XCreateGC (st->dpy, st->b, GCForeground, &st->gcv);
-	gcv.foreground = get_pixel_resource(dpy, st->xgwa.colormap, "background", "Background");
 	st->bgc = XCreateGC (st->dpy, st->b, GCForeground, &st->gcv);
+	st->textgc = XCreateGC (st->dpy, st->b, GCForeground, &st->gcv);
+	colorname = get_string_resource(st->dpy, "background","Background");
+	/*if (!colorname) colorname = strdup("black");*/
+	XftColorAllocName(st->dpy, st->xgwa.visual, st->xgwa.colormap, colorname, &st->xft_fg);
+	XSetForeground(st->dpy, st->bgc, gcv.background);
 
-	/*XSetLineAttributes(st->dpy, st->) */
-
-
+	/*
 	if (st->ncolors <= 2)
 		mono_p = True;
-	/*
 	   if (!mono_p)
 	   {
 	   GC tmp = st->fgc;
@@ -466,23 +498,22 @@ pidgrid_init (Display *dpy, Window window)
 	st->detailsize = 0;
 	st->showtime = time(NULL) + 5;
 
-	/*
-	   if (st->xgwa.width > 480)
-	   fontname = get_string_resource (st->dpy, "font", "Font");
-	   else
-	   fontname = get_string_resource (st->dpy, "font2", "Font");
-	   */
-	fontname = strdup("HeavyData Nerd Font 10");
+    fontname = get_string_resource (st->dpy, "font", "Font");
+	if (!fontname) fontname = strdup("HeavyData Nerd Font 10");
 	st->font = load_xft_font_retry(st->dpy, screen_number (st->xgwa.screen), fontname);
 	if (!st->font) abort();
 	if (fontname) free (fontname);
 
-	s = strdup("white");
-	XftColorAllocName (st->dpy, st->xgwa.visual, st->xgwa.colormap, s,
+	colorname = get_string_resource(st->dpy, "foreground","Foreground");
+	if (!colorname) colorname = strdup("white");
+	XftColorAllocName(st->dpy, st->xgwa.visual, st->xgwa.colormap, colorname, &st->xft_fg);
+	XSetForeground(st->dpy, st->textgc, gcv.background);
+	XftColorAllocName (st->dpy, st->xgwa.visual, st->xgwa.colormap, colorname,
 			&st->xft_fg);
-	free (s);
+	free (colorname);
 	st->xftdraw = XftDrawCreate (dpy, st->b, st->xgwa.visual,
 			st->xgwa.colormap);
+
    {
 	   XGlyphInfo overall;
 	   XftTextExtentsUtf8 (st->dpy, st->font, (FcChar8 *) "N", 1, &overall);
@@ -490,73 +521,72 @@ pidgrid_init (Display *dpy, Window window)
 	   st->line_height = st->font->ascent + st->font->descent + 1;
    }
 
-
-
 	st->c_user_current = 0;
 	st->c_root_current = 0;
 	st->c_system_current = 0;
 	/*users*/
-	colorcount=200;
+	colorcount=100;
+	hue = get_integer_resource(st->dpy, "usersHue", "Integer");
 	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
-			120, 0.8, 0.6,
-			130, 1, 0.9,
-			150, 1, 0.6,
+			hue, 1, 1.0,
+			hue, 1, 0.5,
+			hue, 1, 0.4,
 			st->c_users, &colorcount, true, false);
-	colorcount=200;
-	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
-			100, 1, 0.2,
-			120, 1, 0.5,
-			160, 1, 0.5,
-			st->c_users_sleep, &colorcount, true, false);
-	/*root*/
 	colorcount=100;
 	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
-			260, 1, 0.8,
-			270, 1, 0.8,
-			280, 1, 0.8,
+			hue, 0.5, 1.0,
+			hue, 0.5, 0.5,
+			hue, 0.5, 0.4,
+			st->c_users_oom, &colorcount, true, false);
+	/*root*/
+	colorcount=100;
+	hue = get_integer_resource(st->dpy, "rootHue", "Integer");
+	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
+			hue, 1, 1.0,
+			hue, 1, 0.5,
+			hue, 1, 0.4,
 			st->c_root, &colorcount, true, false);
 	colorcount=100;
 	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
-			280, 1, 0.2,
-			290, 1, 0.5,
-			300, 1, 0.5,
-			st->c_root_sleep, &colorcount, true, false);
+			hue, 0.5, 1.0,
+			hue, 0.5, 0.5,
+			hue, 0.5, 0.4,
+			st->c_root_oom, &colorcount, true, false);
 	/*system*/
 	colorcount=100;
+	hue = get_integer_resource(st->dpy, "systemHue", "Integer");
 	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
-			220, 0.8, 0.8,
-			230, 0.8, 0.8,
-			240, 0.8, 0.8,
+			hue, 1.0, 1.0,
+			hue, 1.0, 0.5,
+			hue, 1.0, 0.4,
 			st->c_system, &colorcount, true, false);
 	colorcount=100;
 	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
-			200, 1, 0.7,
-			210, 1, 1,
-			220, 1, 1,
-			st->c_system_sleep, &colorcount, true, false);
+			hue, 0.5, 1.0,
+			hue, 0.5, 0.5,
+			hue, 0.5, 0.4,
+			st->c_system_oom, &colorcount, true, false);
+	/*nobody*/
+	colorcount=100;
+	hue = get_integer_resource(st->dpy, "nobodyHue", "Integer");
+	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
+			hue, 1.0, 1.0,
+			hue, 1.0, 0.5,
+			hue, 1.0, 0.4,
+			st->c_nobody, &colorcount, true, false);
+	colorcount=100;
+	make_color_loop(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,
+			hue, 0.5, 1.0,
+			hue, 0.5, 0.5,
+			hue, 0.5, 0.4,
+			st->c_nobody_oom, &colorcount, true, false);
 
-
-	/*gcv.cap_style = CapRound;*/
 	XChangeGC(dpy, st->fgc, GCLineWidth, &gcv);
 
 	st->lastx = st->xgwa.width;
 	st->currenty = 1;
 
-	/* make_color_ramp(st->xgwa.screen, st->xgwa.visual, st->xgwa.colormap,) */
-
-	st->c_nobody.flags = DoRed|DoGreen|DoBlue;
-	st->c_nobody.red = 0x0000;
-	st->c_nobody.blue = 0xFFFF;
-	st->c_nobody.green = 0x0000;
-	XAllocColor(dpy,st->xgwa.colormap,&st->c_nobody);
-	st->c_user.flags = DoRed|DoGreen|DoBlue;
-	st->c_user.red = 0x0000;
-	st->c_user.blue = 0x0000;
-	st->c_user.green = 0xFFFF;
-	XAllocColor(dpy,st->xgwa.colormap,&st->c_user);
-
 	st->pidtree = NULL;
-
 	update_proctree(st);
 
 	return st;
@@ -589,8 +619,7 @@ pidgrid_draw (Display *dpy, Window window, void *closure)
 		else {
 			st->pan += st->pandirection;
 			if (st->pan >= st->currenty - st->xgwa.height)
-				{ fprintf(stderr,"offbottom by: %i\n", st->offbottom );
-					st->pandirection = -1; st->linger=30; }
+				{ st->pandirection = -1; st->linger=30; }
 			if (st->pan <= 0 ) 
 				{ st->pandirection = 1; st->linger=30;}
 		}
@@ -651,6 +680,7 @@ pidgrid_free (Display *dpy, Window window, void *closure)
 	struct state *st = (struct state *) closure;
 	XFreeGC (dpy, st->fgc);
 	XFreeGC (dpy, st->bgc);
+	tdestroy(st->pidtree, free);
 	free (st);
 }
 
@@ -658,7 +688,12 @@ pidgrid_free (Display *dpy, Window window, void *closure)
 static const char *pidgrid_defaults [] = {
 	".background:		black",
 	".foreground:		white",
-	"*delay:		5",
+	".usersHue:		    120",
+	".rootHue:		    270",
+	".systemHue:		250",
+	".nobodyHue:		50",
+	".delay:		    5",
+	".font:		        HeavyData Nerd Font 10",
 #ifdef HAVE_MOBILE
 	"*ignoreRotation:     True",
 #endif
@@ -674,6 +709,14 @@ static XrmOptionDescRec pidgrid_options [] = {
 	{ "-delay",		".delay",	XrmoptionSepArg, 0 },
     { "-db",		".doubleBuffer", XrmoptionNoArg,  "True" },
     { "-no-db",		".doubleBuffer", XrmoptionNoArg,  "False" },
+    { "-db",		".doubleBuffer", XrmoptionNoArg,  "True" },
+    { "-background",".background", XrmoptionSepArg,  0 },
+    { "-foreground",".foreground", XrmoptionSepArg,  0 },
+    { "-users",		".usersHue", XrmoptionSepArg,  0 },
+    { "-root",		".rootHue", XrmoptionSepArg,  0 },
+    { "-system",	".systemHue", XrmoptionSepArg,  0 },
+    { "-nobody",	".nobodyHue", XrmoptionSepArg,  0 },
+    { "-font",	".font", XrmoptionSepArg,  0 },
 	{ 0, 0, 0, 0 }
 };
 

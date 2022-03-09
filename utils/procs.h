@@ -20,8 +20,6 @@ typedef struct proc_t {
 		vsize,      /* virtual size */
 		rss         /* resident set size */
         ;
-	char
-		*cmdline
 		;
 } proc_t;
 
