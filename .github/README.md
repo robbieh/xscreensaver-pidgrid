@@ -13,5 +13,5 @@ Building
 3. `./configure && make` as per usual
 
 
-[pidgrid screenshot](https://raw.githubusercontent.com/robbieh/robbieh.github.io/main/xscreensaver-pidgrid/screenshot.png)
+![pidgrid screenshot](https://raw.githubusercontent.com/robbieh/robbieh.github.io/main/xscreensaver-pidgrid/screenshot.png)
 
