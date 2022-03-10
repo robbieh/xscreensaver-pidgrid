@@ -140,8 +140,8 @@ int simple_readproc(char *path, proc_t *p) {
 	snprintf(procpath, PROCPATHLEN, "/proc/%s", path);
 	if (file2str(procpath, "stat", &ub) == -1) goto next_proc;
 	rc += stat2proc(ub.buf, p);
-	if (file2str(path, "oom_score", &ub) != -1) oomscore2proc(ub.buf, p);
-	if (file2str(path, "oom_score_adj", &ub) != -1) oomadj2proc(ub.buf, p);
+	if (file2str(procpath, "oom_score", &ub) != -1) oomscore2proc(ub.buf, p);
+	if (file2str(procpath, "oom_score_adj", &ub) != -1) oomadj2proc(ub.buf, p);
 
 
 next_proc:
@@ -156,11 +156,9 @@ int stat2name (int pid, char *name) {
 
 	fprintf(stderr,"pid: %i   ", pid);
 	snprintf(path, sizeof path, "/proc/%i", pid);
+	fprintf(stderr,"path: %s   ", path);
 	rc = file2str(path,"stat",  &ub);
 	if (rc <= 0) return rc;
-
-	/* printf ("parsing %s\n", S); */
-	sscanf(ub.buf, "%*d");
 
 	ub.buf = strchr(ub.buf, '(');
 	if (!ub.buf) return 0;
@@ -210,8 +208,8 @@ int get_all_procs(proc_t p[], int maxprocs){
 		rc = simple_readproc(pdir->d_name, &p[counter]);
 		if (rc == -1) { continue;};
 		/*
-		fprintf(stderr,"readproc rc %i tid %i ppid %i state %c rss %lu\n",
-				rc, p->tid, p->ppid, p->state, p->rss);
+		fprintf(stderr,"readproc rc %i tid %i ppid %i state %c rss %lu oom %i oomadj %i\n",
+				rc, p->tid, p->ppid, p->state, p->rss, p->oom_score, p->oom_adj);
 		*/
 		if (p[counter].tid == 0) { continue;};
 		counter++;

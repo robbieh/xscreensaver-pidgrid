@@ -215,7 +215,6 @@ static void walk_and_draw(const void *what, const VISIT which, void *closure){
 		st->c_system_current++;
 		if (st->c_system_current++ >= 99) st->c_system_current = 0;
 	} else  {                                      /*users*/
-
 		if (pth->processes[st->history_index_last].oom_score < 600)
 		XSetForeground(st->dpy,st->fgc,st->c_users[st->c_user_current].pixel);
 		else
@@ -235,6 +234,15 @@ static void walk_and_draw(const void *what, const VISIT which, void *closure){
 		viscount++;
 		if (hsize > (st->xgwa.width)) { hsize-=segw; viscount--; break;};
 	}
+	if (viscount <= 0)  {
+		viscount = 1;
+		hsize = st->xgwa.width - 2;
+		segw = hsize;
+	}
+		/*
+		fprintf(stderr,"viscount: %i pid %i i %i ii %i segw %i hsize %i \n", 
+			viscount, pth->tid, i, ii, segw, hsize);
+			*/
 	gap = (st->xgwa.width - hsize) / viscount;
 	if (gap < 2) gap = 2;
 
@@ -311,17 +319,16 @@ static void walk_and_draw(const void *what, const VISIT which, void *closure){
 				break;
 			case showing:
 				st->currenty += st->detailsize;
-				//stat2name(pth->tid, name);
-				//fprintf(stderr,"got name %p %s\n", name, name);
-				//textsize = sprintf(text, "PID: %i UID: %i RSS: %lu VSIZE: %lu STATE: %c OOMSCORE: %i -- %s", 
-				textsize = sprintf(text, "PID: %i UID: %i RSS: %lu VSIZE: %lu STATE: %c OOMSCORE: %i -- ", 
+				stat2name(pth->tid, name);
+				/*fprintf(stderr,"got name %p %s\n", name, name);*/
+				textsize = sprintf(text, "PID: %i UID: %i RSS: %lu VSIZE: %lu STATE: %c OOMSCORE: %i -- %s", 
 						pth->tid, 
 						pth->processes[st->history_index_last].uid, 
 						pth->processes[st->history_index_last].rss, 
 						pth->processes[st->history_index_last].vsize,
 						pth->processes[st->history_index_last].state,
-						pth->processes[st->history_index_last].oom_score//,
-				//		name
+						pth->processes[st->history_index_last].oom_score,
+						name
 						);
 				XftDrawStringUtf8 (st->xftdraw, &st->xft_fg, st->font,
 						10, y + (height * 2) + st->line_height,
@@ -580,8 +587,6 @@ pidgrid_init (Display *dpy, Window window)
 			hue, 0.5, 0.5,
 			hue, 0.5, 0.4,
 			st->c_nobody_oom, &colorcount, true, false);
-
-	XChangeGC(dpy, st->fgc, GCLineWidth, &gcv);
 
 	st->lastx = st->xgwa.width;
 	st->currenty = 1;
